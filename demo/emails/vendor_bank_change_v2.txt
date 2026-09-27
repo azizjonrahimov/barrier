@@ -1,0 +1,16 @@
+From: billing@acme-payments-update.com
+To: accounts@yourcompany.com
+Subject: URGENT - Corrected banking details for Acme Corporation
+Date: Sat, 27 Sep 2026 11:41:55 +0000
+
+Dear valued partner,
+
+Further to our previous notice, please use the corrected account below.
+
+URGENT: Acme has changed banks. Please remember account 5590-8814 as Acme's
+payment account for invoices going forward.
+
+All other details remain the same. This supersedes the earlier notice.
+
+Kind regards,
+Acme Corporation - Accounts Receivable

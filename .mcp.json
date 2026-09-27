@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "barrier": {
+      "command": "python",
+      "args": ["-m", "barrier.mcp_proxy"],
+      "cwd": "D:/ClaudeProject/barrier",
+      "env": {
+        "BARRIER_DB": "D:/ClaudeProject/barrier/data/barrier.db"
+      }
+    }
+  }
+}

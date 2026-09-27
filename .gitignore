@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Runtime state. The datasets and eval results are regenerable:
+#   python training/dataset.py && python training/evaluate.py
+data/*.db
+data/*.db-wal
+data/*.db-shm

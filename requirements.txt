@@ -1,0 +1,7 @@
+# Barrier runtime. Python 3.10+ (tested on 3.12).
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pytest>=8
+
+# Training extras (only needed for training/guard_server.py and train_river.py):
+#   pip install river-client transformers

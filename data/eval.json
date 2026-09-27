@@ -1,0 +1,91 @@
+{
+  "measured_at": "2026-09-27 21:58 UTC",
+  "dataset": "22 held-out rows + 26 obfuscated attacks",
+  "rows": [
+    {
+      "name": "Rules + policy only",
+      "available": true,
+      "note": "no model consulted",
+      "attack_recall": 0.9285714285714286,
+      "obfuscated_recall": 0.0,
+      "false_positive_rate": 0.125,
+      "accuracy": 0.4166666666666667,
+      "n": 48,
+      "latency_ms_median": 1.41,
+      "held_out": {
+        "n": 22,
+        "attacks": 14,
+        "benign": 8,
+        "attack_recall": 0.9285714285714286,
+        "false_positive_rate": 0.125,
+        "accuracy": 0.9090909090909091,
+        "exact_verdict_matches": 20,
+        "latency_ms_median": 1.48,
+        "latency_ms_mean": 1.6
+      },
+      "attack_pack": {
+        "n": 26,
+        "attacks": 26,
+        "benign": 0,
+        "attack_recall": 0.0,
+        "false_positive_rate": null,
+        "accuracy": 0.0,
+        "exact_verdict_matches": 0,
+        "latency_ms_median": 1.42,
+        "latency_ms_mean": 1.7
+      }
+    },
+    {
+      "name": "Rules + threat memory",
+      "available": true,
+      "note": "after analysts confirmed the training-set attacks",
+      "attack_recall": 0.9285714285714286,
+      "obfuscated_recall": 0.23076923076923078,
+      "false_positive_rate": 0.125,
+      "accuracy": 0.5208333333333334,
+      "n": 48,
+      "latency_ms_median": 2.84,
+      "held_out": {
+        "n": 22,
+        "attacks": 14,
+        "benign": 8,
+        "attack_recall": 0.9285714285714286,
+        "false_positive_rate": 0.125,
+        "accuracy": 0.9090909090909091,
+        "exact_verdict_matches": 20,
+        "latency_ms_median": 2.79,
+        "latency_ms_mean": 5.66
+      },
+      "attack_pack": {
+        "n": 26,
+        "attacks": 26,
+        "benign": 0,
+        "attack_recall": 0.23076923076923078,
+        "false_positive_rate": null,
+        "accuracy": 0.19230769230769232,
+        "exact_verdict_matches": 5,
+        "latency_ms_median": 2.7,
+        "latency_ms_mean": 5.45
+      }
+    },
+    {
+      "name": "Barrier guard (owned)",
+      "available": false,
+      "note": "not measured - set RIVER_API_KEY, RIVER_BASE_URL, RIVER_MODEL",
+      "attack_recall": null,
+      "false_positive_rate": null,
+      "accuracy": null,
+      "n": null
+    },
+    {
+      "name": "Claude screener",
+      "available": false,
+      "note": "not measured - set ANTHROPIC_API_KEY",
+      "attack_recall": null,
+      "false_positive_rate": null,
+      "accuracy": null,
+      "n": null
+    }
+  ],
+  "caveat": "Seed dataset is hand-written; these are real measurements on it, not a benchmark result. The obfuscated column is the one that matters."
+}

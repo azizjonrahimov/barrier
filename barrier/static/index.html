@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barrier — Owned Security Intelligence</title>
+<style>
+  :root{
+    --bg:#0a0c10; --panel:#11151c; --panel-2:#161b24; --line:#222a37; --line-2:#2c3646;
+    --text:#e9edf4; --dim:#8d97a9; --faint:#5c6678;
+    --allow:#34d399; --quarantine:#fbbf24; --block:#f87171; --accent:#60a5fa;
+    --allow-bg:rgba(52,211,153,.12); --quar-bg:rgba(251,191,36,.12);
+    --block-bg:rgba(248,113,113,.12); --accent-bg:rgba(96,165,250,.12);
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text","Segoe UI",Inter,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box} ::selection{background:var(--accent-bg)}
+  html{scrollbar-color:var(--line-2) transparent}
+  body{margin:0;background:var(--bg);color:var(--text);font:14.5px/1.55 var(--sans);
+       background-image:radial-gradient(1100px 480px at 75% -220px,rgba(96,165,250,.07),transparent 60%)}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+         padding:20px 30px 16px;border-bottom:1px solid var(--line)}
+  .mark{width:38px;height:38px;border-radius:11px;flex:none;
+        background:linear-gradient(140deg,#60a5fa 0%,#34d399 120%);
+        display:grid;place-items:center;font-weight:800;font-size:19px;color:#0a0c10}
+  .brand h1{margin:0;font-size:19px;letter-spacing:-.3px;font-weight:700}
+  .brand p{margin:1px 0 0;color:var(--dim);font-size:12.5px}
+  .head-right{margin-left:auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .screener-pill{font:11.5px var(--mono);color:var(--dim);background:var(--panel);
+                 border:1px solid var(--line);border-radius:99px;padding:6px 13px}
+  .screener-pill b{color:var(--text);font-weight:600}
+  .owned-yes{color:var(--allow)} .owned-no{color:var(--quarantine)}
+
+  /* posture switch */
+  .posture{display:flex;background:var(--panel);border:1px solid var(--line);
+           border-radius:10px;padding:3px;gap:2px}
+  .posture button{border:0;background:none;color:var(--dim);font:600 12px var(--sans);
+                  letter-spacing:.4px;padding:7px 16px;border-radius:8px;cursor:pointer;
+                  text-transform:uppercase;transition:all .15s}
+  .posture button.on-enforce{background:var(--allow-bg);color:var(--allow)}
+  .posture button.on-shadow{background:var(--quar-bg);color:var(--quarantine)}
+  .posture button:not([class*=on-]):hover{color:var(--text)}
+  .shadow-banner{display:none;background:var(--quar-bg);border-bottom:1px solid rgba(251,191,36,.3);
+                 color:#fcd34d;text-align:center;font-size:12.5px;padding:7px 16px}
+  body.shadow .shadow-banner{display:block}
+
+  /* ---------- tiles ---------- */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;
+         padding:18px 30px 4px}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:14px 16px 12px;
+        position:relative;overflow:hidden}
+  .tile::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--line-2)}
+  .tile.t-allow::before{background:var(--allow)} .tile.t-block::before{background:var(--block)}
+  .tile.t-quar::before{background:var(--quarantine)} .tile.t-accent::before{background:var(--accent)}
+  .tile .n{font:650 26px/1.1 var(--mono);letter-spacing:-1px}
+  .tile.t-allow .n{color:var(--allow)} .tile.t-block .n{color:var(--block)}
+  .tile.t-quar .n{color:var(--quarantine)} .tile.t-accent .n{color:var(--accent)}
+  .tile .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin-top:4px}
+
+  /* ---------- nav ---------- */
+  nav{display:flex;gap:2px;padding:14px 30px 0;flex-wrap:wrap}
+  nav button{position:relative;background:none;border:0;color:var(--dim);padding:10px 16px 12px;
+             font:500 13.5px var(--sans);cursor:pointer;border-radius:9px 9px 0 0}
+  nav button:hover{color:var(--text)}
+  nav button.on{color:var(--text)}
+  nav button.on::after{content:"";position:absolute;left:14px;right:14px;bottom:0;height:2px;
+                       border-radius:2px;background:var(--accent)}
+  nav .badge{font:600 10.5px var(--mono);background:var(--quar-bg);color:var(--quarantine);
+             border-radius:99px;padding:1px 7px;margin-left:6px;vertical-align:1px}
+  .navline{height:1px;background:var(--line);margin:0 30px}
+
+  main{padding:20px 30px 70px;max-width:1180px}
+  section{display:none} section.on{display:block}
+
+  /* ---------- decision rows ---------- */
+  .row{background:var(--panel);border:1px solid var(--line);border-radius:13px;
+       padding:14px 17px;margin-bottom:10px;transition:border-color .15s}
+  .row:hover{border-color:var(--line-2)}
+  .row .top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .chip{font:700 10.5px var(--mono);letter-spacing:.8px;padding:4px 9px;border-radius:6px}
+  .chip.ALLOW{background:var(--allow-bg);color:var(--allow)}
+  .chip.QUARANTINE{background:var(--quar-bg);color:var(--quarantine)}
+  .chip.BLOCK{background:var(--block-bg);color:var(--block)}
+  .chip.ghost{background:none;border:1px dashed var(--line-2);color:var(--faint)}
+  .riskbar{width:74px;height:5px;border-radius:3px;background:var(--line);overflow:hidden;flex:none}
+  .riskbar i{display:block;height:100%;border-radius:3px}
+  .risk-label{font:11.5px var(--mono);color:var(--dim)}
+  .gate{font:10.5px var(--mono);color:var(--faint);border:1px solid var(--line);
+        padding:2.5px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px}
+  .tiertag{font:10.5px var(--mono);padding:2.5px 7px;border-radius:6px;
+           background:var(--accent-bg);color:var(--accent)}
+  .tiertag.immune{background:rgba(192,132,252,.14);color:#c084fc}
+  .tiertag.lineage{background:var(--block-bg);color:var(--block)}
+  .pol{font:600 10.5px var(--mono);color:var(--accent);border:1px solid rgba(96,165,250,.3);
+       padding:2.5px 7px;border-radius:6px}
+  .when{margin-left:auto;color:var(--faint);font-size:11.5px;flex:none}
+  .content{margin:10px 0 7px;font-size:14px;overflow-wrap:anywhere}
+  .meta{color:var(--dim);font-size:12px;display:flex;gap:14px;flex-wrap:wrap}
+  .meta b{color:var(--text);font-weight:500}
+  .reason{color:var(--dim);font-size:12.5px;margin-top:6px;font-style:italic}
+  details{margin-top:9px} details summary{cursor:pointer;color:var(--faint);font-size:12px;user-select:none}
+  details summary:hover{color:var(--dim)}
+  details ul{margin:8px 0 0;padding-left:16px;color:var(--dim)}
+  details li{margin:4px 0;font:11.5px var(--mono);overflow-wrap:anywhere}
+
+  .btn{background:var(--panel-2);border:1px solid var(--line-2);color:var(--text);
+       padding:7px 14px;border-radius:8px;cursor:pointer;font:500 12.5px var(--sans);
+       transition:all .12s}
+  .btn:hover{border-color:var(--accent)}
+  .btn.danger{color:var(--block);border-color:rgba(248,113,113,.35)}
+  .btn.danger:hover{background:var(--block-bg);border-color:var(--block)}
+  .btn.ok{color:var(--allow);border-color:rgba(52,211,153,.35)}
+  .btn.ok:hover{background:var(--allow-bg);border-color:var(--allow)}
+  .actions{display:flex;gap:8px;margin-top:11px}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--panel);
+        border:1px solid var(--line);border-radius:13px;overflow:hidden}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:0}
+  th{color:var(--faint);font-weight:600;font-size:10.5px;text-transform:uppercase;
+     letter-spacing:.7px;background:var(--panel-2)}
+  td.num{font:12.5px var(--mono)}
+  .empty{color:var(--faint);padding:34px;text-align:center;border:1px dashed var(--line);
+         border-radius:13px;font-size:13px}
+  .note{background:var(--accent-bg);border:1px solid rgba(96,165,250,.25);color:#93c5fd;
+        padding:12px 16px;border-radius:11px;font-size:12.5px;margin-bottom:14px;line-height:1.55}
+  .note.warn{background:var(--quar-bg);border-color:rgba(251,191,36,.3);color:#fcd34d}
+  h2{font-size:12px;margin:26px 0 10px;color:var(--faint);font-weight:650;
+     text-transform:uppercase;letter-spacing:1px}
+  h2:first-child{margin-top:0}
+  .strike{opacity:.4} .strike td:first-child{text-decoration:line-through}
+  .hitcount{font:600 10.5px var(--mono);background:rgba(192,132,252,.14);color:#c084fc;
+            border-radius:99px;padding:1px 8px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark">B</div>
+  <div class="brand">
+    <h1>Barrier</h1>
+    <p>Owned security intelligence — between what your agents learn and what they do</p>
+  </div>
+  <div class="head-right">
+    <div class="posture" id="posture" title="Enforce stops bad writes. Shadow watches and records what would have happened.">
+      <button id="pb-enforce" onclick="setPosture('enforce')">Enforce</button>
+      <button id="pb-shadow" onclick="setPosture('shadow')">Shadow</button>
+    </div>
+    <div class="screener-pill" id="guard">loading…</div>
+  </div>
+</header>
+<div class="shadow-banner">SHADOW MODE — Barrier is watching, not acting. Verdicts are recorded; nothing is stopped.</div>
+
+<div class="tiles" id="tiles"></div>
+
+<nav id="nav">
+  <button class="on" data-tab="activity">Activity</button>
+  <button data-tab="quarantine">Quarantine <span class="badge" id="qbadge" hidden></span></button>
+  <button data-tab="sources">Sources</button>
+  <button data-tab="memory">Protected memory</button>
+  <button data-tab="threats">Threat memory</button>
+  <button data-tab="intel">Intelligence</button>
+</nav>
+<div class="navline"></div>
+
+<main>
+  <section id="activity" class="on"></section>
+  <section id="quarantine"></section>
+  <section id="sources"></section>
+  <section id="memory"></section>
+  <section id="threats"></section>
+  <section id="intel"></section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = (r) => Math.round((r || 0) * 100) + "%";
+const ago = (ts) => {
+  const s = Math.max(0, Date.now()/1000 - ts);
+  if (s < 60) return Math.floor(s) + "s ago";
+  if (s < 3600) return Math.floor(s/60) + "m ago";
+  return Math.floor(s/3600) + "h ago";
+};
+const riskColor = (r) => r >= 0.8 ? "var(--block)" : r >= 0.5 ? "var(--quarantine)" : "var(--allow)";
+const get  = (u) => fetch(u).then(r => r.json());
+const post = (u, b) => fetch(u, {method:"POST", headers:{"content-type":"application/json"},
+                                body: JSON.stringify(b || {})}).then(r => r.json());
+
+let tab = "activity";
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === tab));
+  refresh();
+});
+
+async function setPosture(mode) {
+  await post("/v1/posture", {mode});
+  refresh();
+}
+
+function decisionRow(d, opts = {}) {
+  const ev = (d.evidence || []).filter(e => e.detail);
+  const pols = (d.policy_ids || []).map(p => `<span class="pol">${esc(p)}</span>`).join("");
+  const shadowed = d.posture === "shadow" && d.enforced_verdict && d.enforced_verdict !== d.verdict;
+  const tierClass = d.tier === "immune" ? "immune" : d.tier === "lineage" ? "lineage" : "";
+  return `
+  <div class="row">
+    <div class="top">
+      <span class="chip ${esc(d.verdict)}">${esc(d.verdict)}</span>
+      ${shadowed ? `<span class="chip ghost" title="what enforce would have done">shadow: ${esc(d.enforced_verdict)}</span>` : ""}
+      <span class="riskbar"><i style="width:${Math.round((d.risk||0)*100)}%;background:${riskColor(d.risk)}"></i></span>
+      <span class="risk-label">${pct(d.risk)}</span>
+      <span class="gate">${esc(d.gate)}</span>
+      ${d.tier && d.tier !== "rules" ? `<span class="tiertag ${tierClass}">${esc(d.tier)}</span>` : ""}
+      ${pols}
+      <span class="when">${ago(d.ts)}</span>
+    </div>
+    <div class="content">${esc(d.content).slice(0, 400)}</div>
+    <div class="meta">
+      <span>source <b>${esc(d.source_label)}</b> (${esc(d.trust)})</span>
+      <span>agent <b>${esc(d.agent_id)}</b></span>
+      ${d.entity ? `<span>entity <b>${esc(d.entity)}</b></span>` : ""}
+    </div>
+    <div class="reason">${esc(d.reason)}</div>
+    ${ev.length ? `<details><summary>${ev.length} pieces of evidence</summary><ul>${
+        ev.map(e => `<li>[${esc(e.tier)}] ${esc(e.detail)}</li>`).join("")}</ul></details>` : ""}
+    ${opts.review ? `<div class="actions">
+        <button class="btn danger" onclick="rule('${d.id}','reject')">Confirm malicious — learn it</button>
+        <button class="btn ok" onclick="rule('${d.id}','approve')">Approve — this is legitimate</button>
+      </div>` : ""}
+    ${d.resolved ? `<div class="meta" style="margin-top:8px">analyst ruled
+        <b>${esc(d.human_verdict)}</b> — now a training example${
+        d.human_verdict === "BLOCK" ? " and an antibody" : ""}</div>` : ""}
+  </div>`;
+}
+
+async function rule(id, action) {
+  await post(`/v1/quarantine/${id}/${action}`);
+  refresh();
+}
+
+async function withdrawSource(id) {
+  const res = await post("/v1/sources/withdraw", {source_id: id, reason: "source confirmed compromised"});
+  alert(`Withdrew ${res.count} memories created by ${id}.\nEvery agent on this brain has lost them.`);
+  refresh();
+}
+
+async function renderActivity() {
+  const {decisions} = await get("/v1/activity?limit=60");
+  $("#activity").innerHTML = decisions.length
+    ? decisions.map(d => decisionRow(d)).join("")
+    : `<div class="empty">No writes screened yet. Run <code>python -m barrier.demo</code>.</div>`;
+}
+
+async function renderQuarantine() {
+  const {items} = await get("/v1/quarantine");
+  $("#quarantine").innerHTML = items.length
+    ? `<div class="note">Held for a human. <b>Approve</b> writes the memory after all.
+       <b>Confirm malicious</b> marks the source compromised <i>and stores an antibody</i> —
+       from that moment the immune tier catches paraphrases of this attack with no retraining.</div>` +
+      items.map(d => decisionRow(d, {review: true})).join("")
+    : `<div class="empty">Quarantine queue is empty.</div>`;
+}
+
+async function renderSources() {
+  const {sources} = await get("/v1/sources");
+  if (!sources.length) { $("#sources").innerHTML = `<div class="empty">No sources seen yet.</div>`; return; }
+  $("#sources").innerHTML = `<table>
+    <tr><th>Source</th><th>Kind</th><th>Trust</th><th>Writes</th><th>Live</th>
+        <th>Withdrawn</th><th>Max risk</th><th></th></tr>
+    ${sources.map(s => `<tr>
+      <td>${esc(s.label)} ${s.compromised ? '<span class="chip BLOCK">COMPROMISED</span>' : ""}</td>
+      <td>${esc(s.kind)}</td><td>${esc(s.trust)}</td>
+      <td class="num">${s.decisions}</td>
+      <td class="num">${s.live_memories}</td>
+      <td class="num">${s.withdrawn_memories}</td>
+      <td class="num" style="color:${riskColor(s.max_risk)}">${pct(s.max_risk)}</td>
+      <td>${s.live_memories ? `<button class="btn danger"
+            onclick="withdrawSource('${esc(s.id)}')">Withdraw source</button>` : ""}</td>
+    </tr>`).join("")}</table>
+    <div class="note" style="margin-top:14px">Withdrawing a source retracts every memory it ever
+      created — the blast radius of one poisoned email, undone in a click.</div>`;
+}
+
+async function renderMemory() {
+  const {memories} = await get("/v1/memories");
+  $("#memory").innerHTML = memories.length
+    ? `<table><tr><th>Memory</th><th>Entity</th><th>Source</th><th>Agent</th><th>Risk</th><th>State</th></tr>
+       ${memories.map(m => `<tr class="${m.withdrawn ? "strike" : ""}">
+         <td>${esc(m.content).slice(0,150)}</td><td>${esc(m.entity || "—")}</td>
+         <td>${esc(m.source_label)}</td><td>${esc(m.agent_id)}</td>
+         <td class="num">${pct(m.risk_score)}</td>
+         <td>${m.withdrawn ? "withdrawn" : "live"}</td></tr>`).join("")}</table>`
+    : `<div class="empty">Nothing in protected memory yet.</div>`;
+}
+
+async function renderThreats() {
+  const {antibodies} = await get("/v1/threats");
+  $("#threats").innerHTML = antibodies.length
+    ? `<div class="note">Every attack an analyst confirms becomes an <b>antibody</b>.
+       New writes are compared against these before anything else runs — a re-sent template
+       (rotated account numbers and all) or a fresh attempt against an already-attacked entity
+       is caught the moment it arrives. This is intelligence the organization <i>owns</i>:
+       it exists nowhere else and updates the instant a human rules.</div>
+       <table><tr><th>Learned attack</th><th>Category</th><th>Entity</th><th>From</th>
+         <th>Analyst</th><th>Caught since</th></tr>
+       ${antibodies.map(t => `<tr>
+         <td>${esc(t.content).slice(0,120)}</td>
+         <td>${esc(t.category)}</td>
+         <td>${esc(t.entity || "—")}</td>
+         <td>${esc(t.source_id)}</td>
+         <td>${esc(t.analyst)}</td>
+         <td><span class="hitcount">${t.hits} hit${t.hits === 1 ? "" : "s"}</span></td>
+       </tr>`).join("")}</table>`
+    : `<div class="empty">No antibodies yet. Confirm an attack in the Quarantine tab and
+       Barrier learns it — permanently, instantly, without retraining.</div>`;
+}
+
+async function renderIntel() {
+  const d = await get("/v1/intelligence/stats");
+  const g = d.guard, s = d.stats;
+  const evalBlock = d.evaluation
+    ? `<table><tr><th>Screener</th><th>Held-out recall</th><th>Obfuscated recall</th>
+         <th>False positives</th><th>Median ms</th></tr>
+       ${(d.evaluation.rows || []).map(r => r.available === false
+         ? `<tr><td>${esc(r.name)}</td><td colspan="4" style="color:var(--faint)">${esc(r.note || "not measured")}</td></tr>`
+         : `<tr><td>${esc(r.name)}</td>
+         <td class="num">${r.attack_recall == null ? "—" : pct(r.attack_recall)}</td>
+         <td class="num" style="color:${(r.obfuscated_recall ?? 0) < 0.5 ? "var(--block)" : "var(--allow)"}">
+           ${r.obfuscated_recall == null ? "—" : pct(r.obfuscated_recall)}</td>
+         <td class="num">${r.false_positive_rate == null ? "—" : pct(r.false_positive_rate)}</td>
+         <td class="num">${r.latency_ms_median ?? "—"}</td></tr>`).join("")}</table>
+       <div class="meta" style="margin-top:8px">measured ${esc(d.evaluation.measured_at || "")}
+         on ${esc(d.evaluation.dataset || "held-out set")}</div>
+       <div class="note" style="margin-top:12px"><b>Obfuscated recall is the column that matters.</b>
+         Rules catch the phrasings their author imagined. Threat memory recovers the ones this
+         organization has already lived through. The owned guard model is trained to catch the rest.
+         ${esc(d.evaluation.caveat || "")}</div>`
+    : `<div class="note warn">No evaluation has been run yet, so there are no numbers to show.
+        Run <code>python training/evaluate.py</code> and this table fills in with measured
+        results. Barrier does not display figures it did not measure.</div>`;
+
+  $("#intel").innerHTML = `
+    <h2>The four tiers</h2>
+    <table>
+      <tr><th>Tier</th><th>What it is</th><th>Status</th></tr>
+      <tr><td><b>1 · Rules + policy</b></td>
+          <td>Deterministic detectors, re-weighted by source trust, bound by org policy</td>
+          <td class="num">always on · ~0.2 ms</td></tr>
+      <tr><td><b>2 · Threat memory</b></td>
+          <td>Antibodies from attacks this organization confirmed — learns instantly, owned entirely</td>
+          <td class="num">${d.threat_memory} antibod${d.threat_memory === 1 ? "y" : "ies"}</td></tr>
+      <tr><td><b>3 · Owned guard model</b></td>
+          <td>Fine-tuned on River from org data + rulings; weights belong to the organization</td>
+          <td class="num" style="color:${g.owned_model ? "var(--allow)" : "var(--quarantine)"}">
+            ${g.owned_model ? esc(g.model_version) : "not configured — set BARRIER_GUARD_URL or River keys"}</td></tr>
+      <tr><td><b>4 · Lineage</b></td>
+          <td>Identifiers introduced by stopped writes stay radioactive in later actions</td>
+          <td class="num">always on</td></tr>
+    </table>
+    <h2>Evaluation — measured, never invented</h2>${evalBlock}
+    <h2>Organization policy</h2>
+    <table><tr><th>ID</th><th>Policy</th><th>Action</th></tr>
+      ${d.policies.map(p => `<tr><td class="num">${esc(p.id)}</td><td>${esc(p.text)}</td>
+        <td><span class="chip ${esc(p.action)}">${esc(p.action)}</span></td></tr>`).join("")}</table>
+    <h2>Learning loop</h2>
+    <table>
+      <tr><td>Security decisions learned from analysts</td><td class="num">${d.training_rows_from_feedback}</td></tr>
+      <tr><td>Writes screened</td><td class="num">${s.screened}</td></tr>
+      <tr><td>Protected memory store</td><td class="num">${esc(d.store)}</td></tr>
+      <tr><td>Quarantine threshold</td><td class="num">${d.thresholds.quarantine_at}</td></tr>
+    </table>`;
+}
+
+async function renderHeader() {
+  const d = await get("/v1/intelligence/stats");
+  const s = d.stats, g = d.guard;
+  $("#guard").innerHTML = `screener <b>${esc(g.model_version)}</b> · owned:
+    <b class="${g.owned_model ? "owned-yes" : "owned-no"}">${g.owned_model ? "yes" : "not yet"}</b>`;
+  $("#pb-enforce").className = d.posture === "enforce" ? "on-enforce" : "";
+  $("#pb-shadow").className = d.posture === "shadow" ? "on-shadow" : "";
+  document.body.classList.toggle("shadow", d.posture === "shadow");
+  const badge = $("#qbadge");
+  badge.hidden = !s.quarantined_open;
+  badge.textContent = s.quarantined_open;
+  const tiles = [
+    ["t-allow", s.protected_memories, "Protected memories"],
+    ["t-accent", s.protected_agents, "Agents protected"],
+    ["t-block", s.blocked, "Threats blocked"],
+    ["t-quar", s.quarantined_open, "Awaiting review"],
+    ["t-accent", d.threat_memory, "Antibodies"],
+    ["", s.withdrawn_memories, "Withdrawn"],
+  ];
+  $("#tiles").innerHTML = tiles.map(([c, n, l]) =>
+    `<div class="tile ${c}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+}
+
+async function refresh() {
+  try {
+    await renderHeader();
+    if (tab === "activity")   await renderActivity();
+    if (tab === "quarantine") await renderQuarantine();
+    if (tab === "sources")    await renderSources();
+    if (tab === "memory")     await renderMemory();
+    if (tab === "threats")    await renderThreats();
+    if (tab === "intel")      await renderIntel();
+  } catch (e) { console.error(e); }
+}
+
+refresh();
+setInterval(refresh, 2500);
+</script>
+</body>
+</html>
