@@ -108,18 +108,6 @@ python training/guard_server.py models    # list the River models your key can t
 
 ---
 
-## Make a demo video (step by step, all real)
-
-1. `python -m barrier.api`, open `http://127.0.0.1:7777`, go to **Live test**.
-2. Click **Wire fraud**, hit **Screen it** → **QUARANTINE** with the reason. *This poison is stopped.*
-3. Edit the text — change the account number, reword it — screen again. *Still caught.*
-4. Click **Benign (internal)**, screen it → **ALLOW**. *Normal work passes.*
-5. Go to **Quarantine**, click **Confirm malicious** on the wire-fraud item.
-6. Back to **Live test**, paste a *reworded* version of that attack → **BLOCK, immune tier**. *It just learned.*
-7. Go to **Self-improvement**, click **Retrain the guard on our mistakes**. *Watch River train a new owned model, live.*
-
-No pre-clicked buttons, no canned answers — you type, it decides.
-
 ---
 
 ## Measured results
