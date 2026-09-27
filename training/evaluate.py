@@ -44,7 +44,7 @@ def _dash() -> str:
 
 DASH = _dash()
 
-from barrier.guard import AnthropicGuard, NullGuard, RiverGuard  # noqa: E402
+from barrier.guard import AnthropicGuard, HttpGuard, NullGuard, RiverGuard  # noqa: E402
 from barrier.ledger import Ledger  # noqa: E402
 from barrier.models import Gate, ScreenRequest, Trust, Verdict  # noqa: E402
 from barrier.screen import Screener  # noqa: E402
@@ -146,13 +146,17 @@ def screeners() -> list[tuple[str, Screener | None, str]]:
          "after analysts confirmed the training-set attacks"),
     ]
 
+    http = HttpGuard()
     river = RiverGuard()
-    if river.available():
+    if http.available():
+        out.append(("Barrier guard (owned, River-trained)", build(http, "always"),
+                    f"self-trained model served at {http.url}"))
+    elif river.available():
         out.append((f"Barrier guard (owned, {river.model})", build(river, "always"),
                     "fine-tuned on River, weights ours"))
     else:
-        out.append((f"Barrier guard (owned)", None,
-                    "not measured - set " + ", ".join(river.missing())))
+        out.append(("Barrier guard (owned)", None,
+                    "not measured - set BARRIER_GUARD_URL (or River keys)"))
 
     claude = AnthropicGuard()
     if claude.available():

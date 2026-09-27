@@ -177,3 +177,86 @@ class ImmuneSystem:
     def size(self) -> int:
         self._refresh()
         return len(self._antibodies)
+
+
+@dataclass
+class Tolerance:
+    tol_id: str
+    decision_id: str
+    category: str
+    trust: str
+    content: str
+    sig: Counter[int]
+
+
+@dataclass
+class ToleranceMatch:
+    tolerance: Tolerance
+    similarity: float
+
+    @property
+    def damping(self) -> float:
+        # 0.6 similarity -> keep ~65% of the risk; 0.9 -> keep ~35%.
+        return max(0.3, 1.0 - (self.similarity - TOLERATE_AT) * 2.2 - 0.3)
+
+
+TOLERATE_AT = 0.60
+
+
+class ToleranceSystem:
+    """The suppressor half of the immune system.
+
+    When an analyst releases a quarantined item ("this was legitimate"),
+    Barrier remembers the mistake. A later write that resembles a released one
+    - same shape, equal-or-better source trust - has its risk damped, so the
+    quarantine queue stops filling with the same false positive. Analysts
+    teach Barrier in both directions: reject teaches attacks, approve teaches
+    normal life. Security still wins ties: a tolerance can lower risk, never
+    force an ALLOW past a policy floor, and never applies to secrets or
+    dangerous commands (those categories are excluded outright).
+    """
+
+    NEVER_TOLERATED = {"secret_storage", "credential_exfiltration",
+                       "malicious_command", "procedure_poisoning"}
+    _TRUST_RANK = {"internal": 3, "trusted": 2, "unknown": 1, "external": 0}
+
+    def __init__(self, ledger) -> None:
+        self.ledger = ledger
+        self._tolerances: list[Tolerance] = []
+        self._count = -1
+
+    def _refresh(self) -> None:
+        rows = self.ledger.tolerances()
+        if len(rows) == self._count:
+            return
+        self._tolerances = [
+            Tolerance(r["id"], r["decision_id"], r["category"], r["trust"],
+                      r["content"], signature(r["content"]))
+            for r in rows
+        ]
+        self._count = len(rows)
+
+    def match(self, content: str, category: str | None, trust: object) -> ToleranceMatch | None:
+        if category in self.NEVER_TOLERATED:
+            return None
+        self._refresh()
+        if not self._tolerances:
+            return None
+        trust_value = getattr(trust, "value", trust)
+        sig = signature(content)
+        best: ToleranceMatch | None = None
+        for tol in self._tolerances:
+            # A tolerance learned from an internal write must not excuse the
+            # same words arriving from an external source.
+            if self._TRUST_RANK.get(trust_value, 0) < self._TRUST_RANK.get(tol.trust, 3):
+                continue
+            score = cosine(sig, tol.sig)
+            if score >= TOLERATE_AT and (best is None or score > best.similarity):
+                best = ToleranceMatch(tol, score)
+        if best:
+            self.ledger.record_tolerance_hit(best.tolerance.tol_id)
+        return best
+
+    def size(self) -> int:
+        self._refresh()
+        return len(self._tolerances)

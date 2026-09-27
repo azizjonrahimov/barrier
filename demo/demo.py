@@ -255,21 +255,42 @@ def main() -> None:
     print()
     show(result, "Memorable would have shared this with every agent on the store.")
 
+    # -------------------------- beat 8: learning the OTHER kind of mistake
+    beat(8, "It learns from false positives too")
+    say(f"   Finance really did change Acme's account. The correction conflicts with what")
+    say(f"   we knew, so Barrier holds it {DASH} correctly cautious, but a false alarm:")
+    fp = barrier.screen_memory(
+        "Finance update: Acme invoices now go to account 4471-002-88 at First National.",
+        entity="Acme", source_id="slack/finance", source_label="Finance Slack",
+        source_kind="slack", trust=Trust.INTERNAL, agent_id="claude-code", writer="finance")
+    show(fp)
+    say(f"\n   The analyst releases it: {C['allow']}legitimate{C['off']}. Barrier stores a "
+        f"{C['bold']}tolerance{C['off']}.")
+    barrier.approve(fp.decision_id, analyst="azizjon")
+    say(f"   Next quarter, the same kind of correction arrives:")
+    again = barrier.screen_memory(
+        "Finance update: Acme invoices now go to account 4471-002-93 at First National.",
+        entity="Acme", source_id="slack/finance", source_label="Finance Slack",
+        source_kind="slack", trust=Trust.INTERNAL, agent_id="claude-code", writer="finance")
+    show(again, "Passed by the tolerance tier. Barrier stopped repeating its own mistake.")
+
     # ------------------------------------------------------------ closing
-    beat(8, "Where the intelligence lives")
+    beat(9, "Where the intelligence lives")
     stats = ledger.stats()
     say(f"   screened {stats['screened']}   allowed {stats['allowed']}   "
         f"blocked {stats['blocked']}   quarantined {stats['quarantined_total']}   "
-        f"withdrawn {stats['withdrawn_memories']}   antibodies {barrier.immune.size()}")
+        f"withdrawn {stats['withdrawn_memories']}   antibodies {barrier.immune.size()}   "
+        f"tolerances {barrier.tolerance.size()}")
     say(f"\n   Everything above ran through four tiers: {C['bold']}rules{C['off']} you can read, "
         f"{C['bold']}policy{C['off']} you wrote,")
     say(f"   {C['bold']}threat memory{C['off']} you confirmed, and {DASH} when configured {DASH} "
         f"a {C['bold']}guard model you own{C['off']}.")
-    say(f"\n   Dashboard: {C['cyan']}http://127.0.0.1:7777{C['off']}")
+    say(f"\n   And when its analysts have corrected enough, Barrier {C['bold']}retrains its own "
+        f"guard on River{C['off']} {DASH}")
+    say(f"   from those exact rulings, owned weights, one click in the dashboard. No engineer.")
+    say(f"\n   Dashboard: {C['cyan']}http://127.0.0.1:7777{C['off']}  "
+        f"{C['dim']}(Live test + Self-improvement tabs){C['off']}")
     say(f"   {C['dim']}Active screener: {barrier.guard.model_version}{C['off']}")
-    if barrier.guard.name not in ("river", "http"):
-        say(f"   {C['dim']}No owned model configured yet {DASH} every verdict above came from "
-            f"tiers that run for free.{C['off']}")
     say(f"\n   {C['bold']}Own your agents. Own your models. Own your memory. "
         f"Own what they trust.{C['off']}\n")
 

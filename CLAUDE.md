@@ -12,13 +12,27 @@ agents learn (memory), reuse (procedures), and do (actions).
 | Tier | File | What it is |
 |---|---|---|
 | 1 Rules + policy | `barrier/rules.py`, `barrier/policy.py` | deterministic detectors, re-weighted by source trust, bound by org policy |
-| 2 Threat memory | `barrier/immune.py` | antibodies from analyst-confirmed attacks; template match (trigram cosine over canonicalized text) + entity sensitization |
-| 3 Owned guard | `barrier/guard.py` | model tier behind one interface: `BARRIER_GUARD_URL` (`:7788` server) > River API > Claude > none |
+| 2 Threat + tolerance memory | `barrier/immune.py` | antibodies (confirmed attacks, raise risk) + tolerances (released false positives, lower risk); trigram-cosine over canonicalized text + entity sensitization |
+| 3 Owned guard | `barrier/guard.py` | model tier behind one interface: `BARRIER_GUARD_URL` (HttpGuard, `:7788`) > River API > Claude > none |
 | 4 Lineage | `barrier/screen.py::_tainted_identifier` | identifiers introduced by stopped writes are blocked in later actions |
 
 Verdicts: ALLOW / QUARANTINE / BLOCK. Posture: **enforce** (act) or **shadow**
-(record what would have happened, let it through). An analyst ruling on a
-quarantined item becomes BOTH a training row and an antibody, instantly.
+(record what would have happened, let it through).
+
+**Self-improvement** (`barrier/selftrain.py`): `POST /v1/selftrain` gathers every
+analyst ruling (confirmed attacks + released false positives) from the ledger,
+folds them into the seed dataset, fine-tunes a fresh guard on **River**,
+measures base-vs-trained, serves it on `:7788`, rebinds the live screener's
+guard to it, and records a `guard_versions` row. All in-process, streamed to the
+dashboard over SSE (`GET /v1/events`). This is the "improves itself without
+outside engineering" requirement, literal.
+
+**Verified against the live River API on 2026-09-27** (key in `.env`, never
+committed): `get_capabilities`, session/create_model (LoRA), list-prompt
+sampling, forward_backward + optim_step, save_weights. Standalone run trained
+`Qwen/Qwen3.5-9B` and measured owned guard = 100%/100% held-out/obfuscated
+recall vs rules 0% on obfuscated. In-app self-train measured base 62.5% ->
+trained 79.2% (stricter exact-verdict metric).
 
 ## Ground truth about this environment
 

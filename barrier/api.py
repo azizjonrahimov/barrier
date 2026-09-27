@@ -15,15 +15,17 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import __version__
+from .events import bus
 from .guard import guard_status
 from .ledger import Ledger
 from .models import ESCALATE_AT, QUARANTINE_AT, Gate, ScreenRequest, Trust, Verdict
 from .policy import POLICIES
 from .screen import Screener
+from .selftrain import SelfTrainer
 from .store import LocalStore
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -34,6 +36,7 @@ app = FastAPI(title="Barrier", version=__version__,
 
 screener = Screener()
 ledger: Ledger = screener.ledger
+trainer = SelfTrainer(ledger, screener=screener)
 
 
 # ----------------------------------------------------------------- schemas
@@ -100,6 +103,51 @@ def _request_from(body: ScreenBody, gate: Gate) -> ScreenRequest:
 
 
 # ------------------------------------------------------------------ gates
+
+class BenchBody(BaseModel):
+    """The live test bench: type any content, pick a source, watch Barrier decide.
+
+    This is deliberately the SAME path a real agent hits through the MCP server -
+    no shortcut, no canned answer. `commit` defaults true so the write really
+    lands (or is really stopped) and shows up in the feed, the queue and memory.
+    """
+    content: str
+    source_id: str = "bench/manual"
+    source_label: str = "Live test bench"
+    source_kind: str = "email"
+    trust: Literal["internal", "trusted", "unknown", "external"] = "external"
+    agent_id: str = "test-bench"
+    entity: str | None = None
+    gate: Literal["memory", "procedure", "action"] = "memory"
+    commit: bool = True
+
+
+@app.post("/v1/bench")
+def bench(body: BenchBody) -> dict[str, Any]:
+    gate = Gate(body.gate)
+    if gate is Gate.PROCEDURE:
+        result = screener.screen_procedure(
+            body.content, source_id=body.source_id, source_label=body.source_label,
+            source_kind=body.source_kind, trust=Trust(body.trust), agent_id=body.agent_id,
+            writer=body.agent_id)
+    elif gate is Gate.ACTION:
+        result = screener.screen_action(
+            body.content, source_id=body.source_id, source_label=body.source_label,
+            source_kind=body.source_kind, trust=Trust(body.trust), agent_id=body.agent_id,
+            writer=body.agent_id)
+    else:
+        req = ScreenRequest(
+            gate=Gate.MEMORY, content=body.content, source_id=body.source_id,
+            source_label=body.source_label, source_kind=body.source_kind,
+            trust=Trust(body.trust), agent_id=body.agent_id, writer=body.agent_id,
+            entity=body.entity, operation="remember")
+        req.existing = [m["content"] for m in screener.store.recall(
+            body.entity or body.content, limit=5)]
+        req.existing_refs = [(m.get("id", ""), m["content"])
+                             for m in screener.store.recall(body.entity or body.content, limit=5)]
+        result = screener.screen(req, commit=body.commit)
+    return result.to_dict()
+
 
 @app.post("/v1/screen/memory")
 def screen_memory(body: ScreenBody) -> dict[str, Any]:
@@ -280,6 +328,10 @@ def intelligence_stats() -> dict[str, Any]:
         "guard": guard_status(),
         "posture": screener.posture(),
         "threat_memory": screener.immune.size(),
+        "tolerance_memory": screener.tolerance.size(),
+        "guard_versions": ledger.guard_versions(),
+        "selftrain": {"available": trainer.available(), "running": trainer.running(),
+                      "status": trainer.status, "base_model": trainer.base_model},
         "store": getattr(screener.store, "name", "unknown"),
         "policies": [{"id": p.id, "text": p.text, "action": p.action.value} for p in POLICIES],
         "thresholds": {"quarantine_at": QUARANTINE_AT, "escalate_at": ESCALATE_AT},
@@ -317,6 +369,44 @@ def set_posture(body: PostureBody) -> dict[str, Any]:
 @app.get("/v1/threats")
 def threats() -> dict[str, Any]:
     return {"antibodies": ledger.threats(), "count": screener.immune.size()}
+
+
+@app.get("/v1/tolerances")
+def tolerances() -> dict[str, Any]:
+    return {"tolerances": ledger.tolerances(), "count": screener.tolerance.size()}
+
+
+# --------------------------------------------------- self-improvement engine
+
+@app.get("/v1/guard/versions")
+def guard_versions() -> dict[str, Any]:
+    return {"versions": ledger.guard_versions(), "trainer": trainer.status,
+            "available": trainer.available(), "running": trainer.running(),
+            "base_model": trainer.base_model}
+
+
+class SelfTrainBody(BaseModel):
+    base_model: str | None = None
+
+
+@app.post("/v1/selftrain")
+def selftrain(body: SelfTrainBody | None = None) -> dict[str, Any]:
+    """Retrain the owned guard on the org's own mistakes. No engineer in the loop."""
+    return trainer.start(body.base_model if body else None)
+
+
+@app.get("/v1/selftrain/status")
+def selftrain_status() -> dict[str, Any]:
+    return {"running": trainer.running(), "status": trainer.status}
+
+
+# ---------------------------------------------------------- live event stream
+
+@app.get("/v1/events")
+def events() -> StreamingResponse:
+    """Server-Sent Events: every decision, ruling and training step, live."""
+    return StreamingResponse(bus.stream(), media_type="text/event-stream",
+                             headers={"cache-control": "no-cache", "x-accel-buffering": "no"})
 
 
 # -------------------------------------------------------------- demo reset

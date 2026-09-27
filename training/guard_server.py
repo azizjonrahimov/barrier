@@ -10,11 +10,9 @@ it with:
 
     BARRIER_GUARD_URL=http://127.0.0.1:7788
 
-UNVERIFIED against a live River account: the calls follow River's documented
-Python API (create_model -> forward_backward -> optim_step -> save_weights,
-sampling from the live session), but the first run against a real key is the
-integration test. `models` prints whatever the client exposes rather than
-guessing ids. Requires: pip install river-client transformers
+Verified against the live River API on 2026-09-27: health_check, get_capabilities,
+session/create_model (LoRA), list-prompt sampling, forward_backward + optim_step,
+save_weights(mode="training"). Requires: pip install river-client transformers
 """
 
 from __future__ import annotations
@@ -77,32 +75,16 @@ def target(row: dict[str, Any]) -> str:
 
 
 def cmd_models() -> None:
-    """Print the base models this key can actually reach. No guessing."""
+    """get_capabilities() is River's authoritative list of models this key can use."""
     river, client = _client()
-    printed = False
-    for attr in ("list_models", "models", "available_models", "base_models"):
-        candidate = getattr(client, attr, None)
-        if candidate is None:
-            continue
-        try:
-            result = candidate() if callable(candidate) else candidate
-        except Exception as exc:  # noqa: BLE001 - present the API's own error
-            print(f"  client.{attr} -> {exc}")
-            continue
-        print(f"Models via client.{attr}:")
-        for item in result if isinstance(result, (list, tuple)) else [result]:
-            print(f"  {getattr(item, 'id', item)}")
-        printed = True
-        break
-    if not printed:
-        print("This river-client version exposes no model-listing call I recognise.")
-        print("Ask the River team which base models your event key can train, then:")
-        print("  python training/guard_server.py train --base <model-id> --serve")
+    print("health:", client.health_check())
+    for name in client.get_capabilities():
+        print(f"  {name}")
 
 
 def accuracy(model: Any, rows: list[dict[str, Any]], label: str) -> float:
-    outs = model.sample(prompts=[f"{SYSTEM}\n\n{render_prompt(as_request(r))}" for r in rows],
-                        num_samples=1, max_tokens=64, temperature=0.0)
+    outs = model.sample([f"{SYSTEM}\n\n{render_prompt(as_request(r))}" for r in rows],
+                        max_tokens=64, temperature=0.0)
     correct = 0
     for out, row in zip(outs, rows):
         parsed = parse_verdict(out[0].text, label)
@@ -116,6 +98,17 @@ class GuardHandler(BaseHTTPRequestHandler):
     model: Any = None
     model_name: str = "unconfigured"
 
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path.rstrip("/") != "/health":
+            self.send_error(404)
+            return
+        data = json.dumps({"ok": True, "model": GuardHandler.model_name}).encode()
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_POST(self) -> None:  # noqa: N802
         if self.path.rstrip("/") != "/screen":
             self.send_error(404)
@@ -127,7 +120,7 @@ class GuardHandler(BaseHTTPRequestHandler):
                 gate=Gate.MEMORY, content=payload.get("content", ""),
                 source_label=payload.get("source_label", "unknown"),
                 trust=Trust(payload.get("trust", "external"))))
-            outs = GuardHandler.model.sample(prompts=[f"{SYSTEM}\n\n{prompt}"], num_samples=1,
+            outs = GuardHandler.model.sample([f"{SYSTEM}\n\n{prompt}"],
                                              max_tokens=64, temperature=0.0)
             parsed = parse_verdict(outs[0][0].text, GuardHandler.model_name)
             body = ({"verdict": parsed.verdict.value, "risk": parsed.risk,
@@ -192,7 +185,7 @@ def cmd_train(args: argparse.Namespace) -> None:
             print(f"epoch {epoch + 1}/{args.epochs}  step={model.step}  "
                   f"loss={batch.metrics['loss']:.4f}")
         accuracy(model, test, "trained guard")
-        model.save_weights(args.name, mode="inference")
+        model.save_weights(args.name, mode="training")
         print(f"Saved checkpoint '{args.name}' (weights are yours).")
         if args.serve:
             # Serve from the SAME live session so the prompt format matches training.

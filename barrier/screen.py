@@ -14,8 +14,9 @@ from typing import Any
 
 from . import policy as policy_mod
 from . import rules as rules_mod
+from .events import bus
 from .guard import Guard, get_guard
-from .immune import ImmuneSystem
+from .immune import ImmuneSystem, ToleranceSystem
 from .ledger import Ledger
 from .models import (
     CATEGORIES,
@@ -81,6 +82,7 @@ class Screener:
         self.store = store if store is not None else get_store()
         self.guard = guard or get_guard()
         self.immune = ImmuneSystem(self.ledger)
+        self.tolerance = ToleranceSystem(self.ledger)
         self.model_mode = os.environ.get("BARRIER_MODEL_MODE", "auto").lower()
 
     # ---------------------------------------------------------------- posture
@@ -142,12 +144,29 @@ class Screener:
             if dominant is None or immune_hit.weight > 0.6:
                 dominant = immune_hit.antibody.category
 
+        # Suppressor half: a write resembling one an analyst already released
+        # gets its risk damped - Barrier stops repeating corrected mistakes.
+        tol_hit = None
+        if immune_hit is None and rules_risk >= QUARANTINE_AT:
+            tol_hit = self.tolerance.match(req.content, dominant, req.trust)
+            if tol_hit is not None:
+                before = rules_risk
+                rules_risk *= tol_hit.damping
+                outcome.notes.append(Evidence(
+                    "tolerance", dominant or "benign", 0.0,
+                    f"Resembles a write an analyst released ({tol_hit.similarity:.0%} similar to "
+                    f"{tol_hit.tolerance.decision_id}); risk damped {before:.0%} -> {rules_risk:.0%}"))
+
         rules_verdict = _verdict_from(rules_risk, dominant, outcome.floor)
         evidence: list[Evidence] = list(outcome.notes)
 
         tier0 = "immune" if immune_hit is not None and rules_risk >= QUARANTINE_AT else "rules"
         verdict, risk, category, tier = rules_verdict, rules_risk, dominant or "benign", tier0
         reason = self._reason(req, category, rules_risk, benign)
+        if tol_hit is not None and verdict is Verdict.ALLOW:
+            tier = "tolerance"
+            reason = ("Learned tolerance: an analyst already released a write like this "
+                      f"({tol_hit.tolerance.decision_id})")
         if immune_hit is not None and tier == "immune":
             if immune_hit.kind == "template":
                 reason = (f"Matches an attack this organization already confirmed "
@@ -231,6 +250,7 @@ class Screener:
         self.ledger.set_decision_posture(result.decision_id,
                                          "shadow" if shadow else "enforce",
                                          enforced_verdict.value)
+        bus.publish("decision", {"decision": self.ledger.decision(result.decision_id)})
         if req.gate is Gate.MEMORY and result.verdict is Verdict.ALLOW:
             memory_id = self.store.remember(
                 req.content,
@@ -332,7 +352,15 @@ class Screener:
         if not decision or decision["resolved"]:
             return decision
         self.ledger.resolve(decision_id, Verdict.ALLOW.value, analyst)
-        if decision["gate"] == Gate.MEMORY.value:
+        # The released false positive becomes a tolerance: Barrier will not
+        # keep quarantining this shape of write from equally-trusted sources.
+        self.ledger.learn_tolerance(decision_id, decision["content"], decision["category"],
+                                    decision["source_id"], decision["trust"], analyst,
+                                    entity=decision["entity"])
+        bus.publish("ruling", {"decision_id": decision_id, "verdict": "ALLOW",
+                               "learned": "tolerance"})
+        # Only a held write needs releasing; an allowed one is already stored.
+        if decision["gate"] == Gate.MEMORY.value and decision["verdict"] == Verdict.QUARANTINE.value:
             memory_id = self.store.remember(
                 decision["content"],
                 entity=decision["entity"],
@@ -358,6 +386,8 @@ class Screener:
         # paraphrases of it, effective immediately, no retraining.
         self.ledger.learn_threat(decision_id, decision["content"], decision["category"],
                                  decision["source_id"], analyst, entity=decision["entity"])
+        bus.publish("ruling", {"decision_id": decision_id, "verdict": "BLOCK",
+                               "learned": "antibody"})
         return self.ledger.decision(decision_id)
 
     # --------------------------------------------------------- blast radius
@@ -369,4 +399,5 @@ class Screener:
         else:
             withdrawn = self.store.withdraw_source(source_id, reason)
         self.ledger.mark_compromised(source_id, True)
+        bus.publish("withdraw", {"source_id": source_id, "count": len(withdrawn)})
         return {"source_id": source_id, "withdrawn": withdrawn, "count": len(withdrawn), "reason": reason}

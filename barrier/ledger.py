@@ -93,9 +93,9 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL
 );
 
--- The immune system: every attack a human confirms becomes an antibody.
--- Future writes are compared against these, so a paraphrase of a known
--- attack is caught even when no rule matches it.
+-- The immune system, half one: every attack a human confirms becomes an
+-- antibody. Future writes are compared against these, so a paraphrase of a
+-- known attack is caught even when no rule matches it.
 CREATE TABLE IF NOT EXISTS threat_memory (
     id          TEXT PRIMARY KEY,
     ts          REAL NOT NULL,
@@ -106,6 +106,37 @@ CREATE TABLE IF NOT EXISTS threat_memory (
     entity      TEXT,
     analyst     TEXT NOT NULL,
     hits        INTEGER NOT NULL DEFAULT 0
+);
+
+-- The immune system, half two: every false positive a human releases becomes
+-- a tolerance. Writes resembling one are damped, so Barrier stops repeating
+-- the mistakes its analysts have already corrected.
+CREATE TABLE IF NOT EXISTS tolerance_memory (
+    id          TEXT PRIMARY KEY,
+    ts          REAL NOT NULL,
+    decision_id TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    category    TEXT NOT NULL,
+    source_id   TEXT NOT NULL,
+    trust       TEXT NOT NULL,
+    entity      TEXT,
+    analyst     TEXT NOT NULL,
+    hits        INTEGER NOT NULL DEFAULT 0
+);
+
+-- Every version of the owned guard the product has trained for itself, with
+-- the numbers measured at training time. This is the self-improvement record.
+CREATE TABLE IF NOT EXISTS guard_versions (
+    id            TEXT PRIMARY KEY,
+    ts            REAL NOT NULL,
+    version       INTEGER NOT NULL,
+    base_model    TEXT NOT NULL,
+    trained_on    INTEGER NOT NULL,
+    from_rulings  INTEGER NOT NULL DEFAULT 0,
+    base_accuracy REAL,
+    accuracy      REAL,
+    status        TEXT NOT NULL DEFAULT 'training',
+    note          TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -146,7 +177,8 @@ def reset_db(db_path: Path | str | None = None) -> None:
     """
     init_db(db_path)
     with connect(db_path) as conn:
-        for table in ("decisions", "memories", "sources", "threat_memory"):
+        for table in ("decisions", "memories", "sources", "threat_memory",
+                      "tolerance_memory", "guard_versions"):
             conn.execute(f"DELETE FROM {table}")
 
 
@@ -229,6 +261,52 @@ class Ledger:
     def record_threat_hit(self, threat_id: str) -> None:
         with connect(self.db_path) as conn:
             conn.execute("UPDATE threat_memory SET hits = hits + 1 WHERE id = ?", (threat_id,))
+
+    def learn_tolerance(self, decision_id: str, content: str, category: str, source_id: str,
+                        trust: str, analyst: str, entity: str | None = None) -> str:
+        """A released false positive becomes a tolerance - the other antibody."""
+        tol_id = new_id("tol")
+        with connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO tolerance_memory (id, ts, decision_id, content, category, source_id, "
+                "trust, entity, analyst) VALUES (?,?,?,?,?,?,?,?,?)",
+                (tol_id, now(), decision_id, content, category, source_id, trust, entity, analyst))
+        return tol_id
+
+    def tolerances(self) -> list[dict[str, Any]]:
+        with connect(self.db_path) as conn:
+            return [dict(r) for r in conn.execute(
+                "SELECT * FROM tolerance_memory ORDER BY ts DESC").fetchall()]
+
+    def record_tolerance_hit(self, tol_id: str) -> None:
+        with connect(self.db_path) as conn:
+            conn.execute("UPDATE tolerance_memory SET hits = hits + 1 WHERE id = ?", (tol_id,))
+
+    # ----------------------------------------------------------- guard versions
+
+    def add_guard_version(self, base_model: str, trained_on: int, from_rulings: int,
+                          note: str = "") -> dict[str, Any]:
+        with connect(self.db_path) as conn:
+            version = (conn.execute("SELECT MAX(version) FROM guard_versions").fetchone()[0] or 0) + 1
+            vid = new_id("gv")
+            conn.execute(
+                "INSERT INTO guard_versions (id, ts, version, base_model, trained_on, from_rulings, note) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (vid, now(), version, base_model, trained_on, from_rulings, note))
+        return {"id": vid, "version": version}
+
+    def finish_guard_version(self, vid: str, status: str, base_accuracy: float | None = None,
+                             accuracy: float | None = None, note: str | None = None) -> None:
+        with connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE guard_versions SET status = ?, base_accuracy = COALESCE(?, base_accuracy), "
+                "accuracy = COALESCE(?, accuracy), note = COALESCE(?, note) WHERE id = ?",
+                (status, base_accuracy, accuracy, note, vid))
+
+    def guard_versions(self) -> list[dict[str, Any]]:
+        with connect(self.db_path) as conn:
+            return [dict(r) for r in conn.execute(
+                "SELECT * FROM guard_versions ORDER BY version DESC").fetchall()]
 
     # -------------------------------------------------------------- decisions
 
