@@ -1,10 +1,10 @@
 # Barrier
 
-**A security layer for AI agents that learns from its own mistakes — and retrains itself, with no engineer in the loop.**
+**AI-native security intelligence layer for AI agents that retrains itself, with no engineer in the loop.**
 
-Your agents share a memory. Anyone who can email you can write a "fact" into it that every agent then trusts. Barrier sits on the write path and decides — **allow, hold for review, or block** — before the poison ever lands. Then it does the thing no security tool does: it remembers every correction a human makes and gets better on its own.
+Your agents share a memory. Anyone who can email you can write a "false fact" into it that every agent then trusts. Barrier sits between agents and their memory and decides — **allow, hold for review, or block** — before the false/poison ever lands. Then it does the thing no security tool does: it remembers every correction a human makes and gets better on its own.
 
-> Own your agents. Own your models. Own your memory. **Own what they trust.**
+> Own your agents. Own your memory. **Own what they trust.**
 
 Built at the YC *Own Your Intelligence* hackathon. Uses **GBrain, QM, River, Memorable, Superset**.
 
