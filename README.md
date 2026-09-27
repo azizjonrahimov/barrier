@@ -76,7 +76,7 @@ This is the "remembers mistakes and improves without outside engineering" requir
 - **Release a false alarm** → it becomes a *tolerance*. Barrier stops quarantining that kind of write from equally-trusted sources — but never excuses a secret, a `curl | sh`, or the same words from an outside source.
 - **Click "Retrain"** → Barrier gathers every ruling, fine-tunes a fresh guard on **River**, measures it, and serves it. You watch it happen live in the dashboard.
 
-You can see all of this run in the product: the **Self-improvement** tab shows the training steps and every guard version it has trained for itself.
+You can see all of this run in the product: the **Self-improvement** tab shows the training steps and every guard version it has trained for itself. (The tab reports a stricter *exact-verdict* score — allow/hold/block all have to match — so its numbers read lower than the "attack caught" table below; both are real, just measuring different things.)
 
 ---
 
