@@ -152,23 +152,6 @@ python -m barrier.demo       # a scripted 9-beat story in the terminal
 python -m pytest -q          # tests
 python training/guard_server.py models    # list the River models your key can train
 ```
-
----
-
-## Make a demo video (step by step, all real)
-
-Every step is typed live in the dashboard — no pre-clicked buttons, no canned answers.
-
-| # | Do this | What you'll see | The point |
-|---|---|---|---|
-| 1 | Open `:7777` → **Live test**, click **Wire fraud**, **Screen it** | 🟡 QUARANTINE + the reason | poison is stopped at the door |
-| 2 | Edit the text — change the account #, reword it — screen again | 🟡 still caught | not a hard-coded string match |
-| 3 | Click **Benign (internal)**, screen it | ✅ ALLOW | normal work sails through |
-| 4 | Go to **Quarantine**, click **Confirm malicious** | antibody stored | a human teaches it, once |
-| 5 | Back to **Live test**, paste a *reworded* version of that attack | 🛑 BLOCK · **immune tier** | it just learned — instantly |
-| 6 | Go to **Self-improvement**, click **Retrain on our mistakes** | River trains a new guard, live | it improves its own model |
-| 7 | Screen a subtle new attack the rules miss | 🛑 BLOCK · **model tier** | the owned model earns its place |
-
 ---
 
 ## Measured results
